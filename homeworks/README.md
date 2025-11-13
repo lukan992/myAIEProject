@@ -1,3 +1,11 @@
+# Запуск блокнотов из uv venv
+Установите uv
+**windosw** - `powershell -c "irm https://astral.sh/uv/install.ps1 | more"`
+**linux\macos** - `curl -LsSf https://astral.sh/uv/install.sh | less`
+
+`cd homeworks`
+`uv sync`
+
 # Домашние задания по семинарам
 
 В этой папке находятся **все домашние задания** по курсу «Инженерия Искусственного Интеллекта».
