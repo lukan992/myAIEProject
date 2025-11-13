@@ -3,8 +3,8 @@
 **windosw** - `powershell -c "irm https://astral.sh/uv/install.ps1 | more"`
 **linux\macos** - `curl -LsSf https://astral.sh/uv/install.sh | less`
 
-`cd homeworks`
-`uv sync`
+- `cd homeworks`
+- `uv sync`
 
 # Домашние задания по семинарам
 
