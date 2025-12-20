@@ -1,6 +1,13 @@
 from __future__ import annotations
 
+from fileinput import filename
+try:
+    from multiprocessing.reduction import steal_handle
+except ImportError:
+    steal_handle = None
+from shutil import ExecError
 from time import perf_counter
+from turtle import st
 
 import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -75,6 +82,18 @@ class QualityResponse(BaseModel):
     dataset_shape: dict[str, int] | None = Field(
         default=None,
         description="Размеры датасета: {'n_rows': ..., 'n_cols': ...}, если известны",
+    )
+
+
+class FlagsResponse(BaseModel):
+    flags: dict = Field(
+        ...,
+        description="asfdsffd"
+    ),
+    latency_ms: float = Field(
+        ...,
+        ge=0.0,
+        description="Время обработки запроса на сервере, миллисекунды",
     )
 
 
@@ -241,4 +260,52 @@ async def quality_from_csv(file: UploadFile = File(...)) -> QualityResponse:
         latency_ms=latency_ms,
         flags=flags_bool,
         dataset_shape={"n_rows": n_rows, "n_cols": n_cols},
+    )
+
+
+# ---------- /quality-flags-from-csv: возвращает полный набор флагов качества ----------
+
+@app.post(
+    "/quality-flags-from-csv",
+    response_model=FlagsResponse,
+    tags=['quality'],
+    summary='возвращает полный набор флагов качества'
+)
+
+async def quality_flags_from_csv(file: UploadFile = File(...)) -> QualityResponse:
+    """
+    Эндпоинт, который принимает CSV-файл, запускает EDA-ядро
+    (summarize_dataset + missing_table + compute_quality_flags)
+    и возвращает полный набор флагов качества.
+    """
+    start = perf_counter()
+    if file.content_type not in ("text/csv", "application/vnd.ms-excel", "application/octet-stream", "application/vnd.apache.parquet"):
+        raise HTTPException(status_code=400, detail="Ожидается CSV-файл или parquet (content-type text/csv или parquet).")
+    
+    try:
+        name = (file.filename or "").lower()
+        if name.endswith('.parquet') or name.endswith('.pq'):
+            df = pd.read_parquet(file.file)
+        if name.endswith('.csv'):
+            df = pd.read_csv(file.file)
+    except Exception as exc:
+        HTTPException(status_code=400, detail=f'Не удалось прочитать CSV: {exc}')
+
+    if df.empty:
+        raise HTTPException(status_code=400, detail='CSV-файл не содержит данных (пустой DataFrame)')
+    
+    summary = summarize_dataset(df)
+    missing_df = missing_table(df)
+    flags_all = compute_quality_flags(summary, missing_df, df)
+
+    latency_ms = (perf_counter() - start) * 1000.0
+
+    return FlagsResponse(
+        flags={
+            "too_few_rows": flags_all['too_few_rows'],
+            "too_many_missing": flags_all['too_many_missing'],
+            "has_high_cardinality_categoricals": flags_all['has_high_cardinality_categoricals'],
+            "has_many_zero_values": flags_all['has_many_zero_values']
+                },
+        latency_ms=latency_ms
     )
